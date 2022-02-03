@@ -4,7 +4,8 @@ const express = require('express');
 const app = express();
 const bodyParser = require('body-parser');
 const DB = require('./db');
-const bcrypt = require('bcrypt-nodejs');
+const crypto = require('crypto');
+const { rejects } = require('assert');
 
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({extended: true}));
@@ -41,31 +42,52 @@ app.post('/register', async(req, res) => {
     const BIRTH = req.body.birth;
     const NAME = req.body.name;
     const PASSWORD = req.body.password;
-    
-    await bcrypt.hash (PASSWORD, null, null, (err, hash) => {
-        const sql = 'INSERT INTO users(user_id,email,phone,birth,name,password) VALUES(?,?,?,?,?,?);';
-        const param = [ID, EMAIL, PHONE_NUM, BIRTH, NAME, hash];
-        DB.query('SELECT * FROM users WHERE user_id=?',param[0],(err, result) => {
-            if(err) console.log(err);
+        
 
-            if(result.length> 0){
-                res.send('이미 사용중인 ID입니다.');
-            }else{
-                DB.query(sql, param, (err, result) => {
-                    if (err){
-                        console.log(err);
-                        res.status(500).send('ERROR');
-                    }else{
-                    console.log('success sign-up!');
-                    }
-                    res.end();
-                });
-            };
-
+    const createSalt = () =>
+        new Promise((resolve, reject) => {
+            crypto.randomBytes(64, (err, buf) => {
+                if (err) reject(err);
+                resolve(buf.toString('base64'));
+            });
         });
-       
+
+    const createHashedPassword = (plainPassword) =>
+        new Promise(async (resolve, reject) => {
+            const salt = await createSalt();
+            crypto.pbkdf2(plainPassword, salt, 9999, 64, 'sha512', (err, key) => {
+                if (err) reject(err);
+                resolve({ password: key.toString('base64'), salt});
+            });
+        });
+
+    const { password, salt } = await createHashedPassword(PASSWORD);
+
+    const sql = 'INSERT INTO users(user_id,email,phone,birth,name,password,salt) VALUES(?,?,?,?,?,?,?);';
+    const param = [ID, EMAIL, PHONE_NUM, BIRTH, NAME, password, salt];
+    DB.query('SELECT * FROM users WHERE user_id=?',param[0],(err, result) => {
+        if(err) console.log(err);
+
+        if(result.length> 0){
+            res.send('이미 사용중인 ID입니다.');
+        }else{
+            DB.query(sql, param, (err, result) => {
+                if (err){
+                    console.log(err);
+                    res.status(500).send('ERROR');
+                }else{
+                console.log('success sign-up!');
+                }
+                res.end();
+            });
+        };
+
     });
+    
+
 });
+
+
 
 
 // 로그인 API
