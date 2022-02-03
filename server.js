@@ -3,17 +3,20 @@
 const express = require('express');
 const app = express();
 const bodyParser = require('body-parser');
-const DB = require('./db');
+const DB = require('./config/db');
 const crypto = require('crypto');
 const { rejects } = require('assert');
+const user = require('./usercontroller');
+
+require('dotenv').config();
 
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({extended: true}));
 
 
-const PORT = 8080;
 
-app.listen(PORT, () => {
+
+app.listen(process.env.PORT || 8080, () => {
     console.log("Todo-Server is running");
 });
  
@@ -31,7 +34,7 @@ app.get('/register', (req, res) => {
 
 
 //회원가입 API(DB연동 후 API를 통해 유저 정보 DB로 전송)
-//bcrpt를 통해 password를 hash처리하여 DB로 전송
+//crypto를 통해 password를 hash처리하여 DB로 전송
 
 app.post('/register', async(req, res) => {
     console.log('회원가입 중');
@@ -43,7 +46,7 @@ app.post('/register', async(req, res) => {
     const NAME = req.body.name;
     const PASSWORD = req.body.password;
         
-
+    //salt 생성
     const createSalt = () =>
         new Promise((resolve, reject) => {
             crypto.randomBytes(64, (err, buf) => {
@@ -51,7 +54,8 @@ app.post('/register', async(req, res) => {
                 resolve(buf.toString('base64'));
             });
         });
-
+    
+    //해시값 생성
     const createHashedPassword = (plainPassword) =>
         new Promise(async (resolve, reject) => {
             const salt = await createSalt();
@@ -63,7 +67,7 @@ app.post('/register', async(req, res) => {
 
     const { password, salt } = await createHashedPassword(PASSWORD);
 
-    const sql = 'INSERT INTO users(user_id,email,phone,birth,name,password,salt) VALUES(?,?,?,?,?,?,?);';
+    //회원가입 DB 연동 로직
     const param = [ID, EMAIL, PHONE_NUM, BIRTH, NAME, password, salt];
     DB.query('SELECT * FROM users WHERE user_id=?',param[0],(err, result) => {
         if(err) console.log(err);
@@ -71,6 +75,7 @@ app.post('/register', async(req, res) => {
         if(result.length> 0){
             res.send('이미 사용중인 ID입니다.');
         }else{
+            const sql = 'INSERT INTO users(user_id,email,phone,birth,name,password,salt) VALUES(?,?,?,?,?,?,?);';
             DB.query(sql, param, (err, result) => {
                 if (err){
                     console.log(err);
@@ -87,17 +92,23 @@ app.post('/register', async(req, res) => {
 
 });
 
+//회원가입 시 문자인증(SENS를 통한) 전송 API
+app.post('/register/send', user.send);
+
+//회원가입 시 문자인증(SENS를 통한) 검증 API
+app.get('/register/verify', user.verify);
+
 
 
 
 // 로그인 API
-app.post('/login', () => {
-   const ID = req.body.id; 
-   const PASSWORD = req.body.password;
+// app.post('/login', () => {
+//    const ID = req.body.id; 
+//    const PASSWORD = req.body.password;
    
-   const sql = '';
+//    const sql = '';
    
-});
+// });
 
 
 // //로그인 이후 모든 todo-list 가져오기
