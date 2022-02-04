@@ -88,4 +88,5 @@ exports.verify = async function (req, res) {
     }
 };
 
+//다른 api들도 전부 모듈화, 라우터로 구성
 
